@@ -16,6 +16,8 @@ Two interfaces are included:
 Both share the same protocol engine (`ax25_core.py`) and produce timestamped
 session log files.
 
+[![VIDEO](https://img.youtube.com/vi/ID_DEL_VIDEO/maxresdefault.jpg)](https://www.youtube.com/watch?v=uz7uIuNDnCc)
+
 ## What is RNode?
 
 [RNode](https://unsigned.io/rnode/) is an open-source firmware/hardware
