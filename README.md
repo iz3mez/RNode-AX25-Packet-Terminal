@@ -169,6 +169,8 @@ MEZNOD:IZ3MEZ-7}
 *** Disconnected from IZ3MEZ-7
 ```
 
+[WATCH VIDEO](https://www.youtube.com/watch?v=uz7uIuNDnCc)
+
 ## Log files
 
 Every run creates a file named `rnode_ax25_YYYYMMDD_HHMMSS.log` in the same
