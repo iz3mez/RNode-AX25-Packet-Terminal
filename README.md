@@ -4,7 +4,7 @@ A lightweight Python client for talking **AX.25 packet radio** (connected-mode
 BBS/node sessions, plus optional UI/broadcast frames like APRS) through an
 **RNode** device running in **TNC mode**, over a plain KISS serial connection.
 
-No AGWPE, no BPQ32, no soundcard TNC — just Python and a serial port.
+No AGWPE, AXCALL, no soundcard TNC — just Python and a serial port.
 
 Two interfaces are included:
 
