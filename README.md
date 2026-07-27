@@ -62,9 +62,6 @@ relies on the standard KISS/AX.25 layer — nothing board-specific.
 - Optional standalone UI frames (e.g. for APRS-style traffic).
 - Classic TNC-style commands: `C CALLSIGN` to connect, `D` to disconnect —
   the same syntax used by BPQ32/AGWPE terminals.
-- Correct line termination (`<CR>`) on every line sent while connected, so
-  node command parsers and pagination prompts (`Continue...>`) work as
-  expected.
 - CP437 decoding for node banners/menus that use box-drawing ASCII art.
 - Command history (arrow up/down) in both interfaces.
 - Per-session timestamped log file, written next to the scripts.
