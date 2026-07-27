@@ -16,7 +16,7 @@ Two interfaces are included:
 Both share the same protocol engine (`ax25_core.py`) and produce timestamped
 session log files.
 
-[![WATCH VIDEO]](https://www.youtube.com/watch?v=uz7uIuNDnCc)
+[WATCH VIDEO](https://www.youtube.com/watch?v=uz7uIuNDnCc)
 
 ## What is RNode?
 
