@@ -1,0 +1,10 @@
+pyserial>=3.5
+
+# Windows only: 'curses' is not part of the standard library on Windows,
+# it is required by the split-screen UI (rnode_ax25_tnc_ui.py).
+windows-curses>=2.3; sys_platform == "win32"
+
+# Windows only, optional: gives arrow-key command history in the simple
+# CLI (rnode_ax25_tnc.py). Without it, the console still provides a basic
+# up-arrow recall of the last line typed.
+pyreadline3>=3.4; sys_platform == "win32"
