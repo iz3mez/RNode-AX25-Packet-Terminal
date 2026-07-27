@@ -90,7 +90,7 @@ standard library there.
 
 ```bash
 git clone https://github.com/iz3mez/RNode-AX25-Packet-Terminal.git
-cd <repository-folder>
+cd RNode-AX25-Packet-Terminal
 pip install -r requirements.txt
 ```
 
