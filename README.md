@@ -196,4 +196,5 @@ requirements.txt        pip dependencies (with platform markers).
 
 ## License
 
-Add your preferred license here (e.g. MIT) before publishing.
+MIT License — see [LICENSE](LICENSE). Edit the copyright line in that file
+with your name/callsign before publishing.
