@@ -1,4 +1,3 @@
-# RNode-AX25-Packet-Terminal
 RNode AX.25 Packet Terminal
 
 A lightweight Python client for talking **AX.25 packet radio** (connected-mode
