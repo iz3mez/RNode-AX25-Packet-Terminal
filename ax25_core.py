@@ -1,12 +1,9 @@
 #!/usr/bin/env python3
 """
-ax25_core.py
+ax25_core.py v.2.0
 ------------
 Logica di protocollo condivisa: framing KISS, codifica/decodifica AX.25,
 stato di sessione connessa (SABM/UA/I/RR/DISC) e thread di ricezione.
-Non contiene nulla di specifico per l'interfaccia utente: le funzioni di
-callback (on_status, on_data) vengono fornite da chi lo usa (CLI o UI
-a schermo diviso).
 73 de Francesco, IZ3MEZ
 """
 
@@ -31,9 +28,6 @@ Available commands:
 
 
 class SessionLogger:
-    """Writes every status/data line to a timestamped log file in the same
-    directory as the script, so packet sessions can be reviewed later."""
-
     def __init__(self, path):
         self.lock = threading.Lock()
         self.path = path
@@ -52,7 +46,6 @@ class SessionLogger:
 
 
 def default_log_path():
-    """Log file path: same directory as this module, one file per run."""
     script_dir = os.path.dirname(os.path.abspath(__file__))
     ts = time.strftime("%Y%m%d_%H%M%S")
     return os.path.join(script_dir, f"rnode_ax25_{ts}.log")
@@ -62,13 +55,6 @@ def default_log_path():
 # ---------------------------------------------------------------------------
 FEND, FESC, TFEND, TFESC = 0xC0, 0xDB, 0xDC, 0xDD
 KISS_CMD_DATA = 0x00
-
-# Comandi RNode "Normal mode" (Reticulum) - da usare solo se il dispositivo
-# NON e' gia' in modalita' TNC. Questi STESSI numeri di comando NON
-# corrispondono ai comandi KISS storici (TXDELAY/Persistence/ecc): RNode non
-# li implementa affatto. Non aggiungere comandi extra su questi byte senza
-# sapere esattamente cosa fanno in RNode (un CR fuori range puo' attivare
-# il "radio lock" del firmware e bloccare silenziosamente la TX).
 CMD_FREQUENCY    = 0x01
 CMD_BANDWIDTH    = 0x02
 CMD_TXPOWER      = 0x03
@@ -121,7 +107,7 @@ class KissDeframer:
         self._in_frame = False
 
     def feed(self, data: bytes):
-        frames = []  # lista di (cmd, payload)
+        frames = []
         for b in data:
             if b == FEND:
                 if self._in_frame and len(self._buf) > 0:
@@ -139,9 +125,6 @@ class KissDeframer:
 
 def send_rnode_config(ser, freq=None, bw=None, sf=None, cr=None, power=None,
                        force_online=False, on_log=print):
-    """Invia (se specificati) i comandi di configurazione radio RNode 'Normal mode'.
-    Se il dispositivo e' gia' in 'Device mode: TNC', questi comandi normalmente
-    NON servono: il radio si auto-configura e si attiva da solo all'accensione."""
     def send_cmd(cmd, payload: bytes):
         ser.write(kiss_build_frame(payload, port=0, cmd=cmd))
         time.sleep(0.05)
@@ -283,9 +266,6 @@ def build_ui_frame(dest, source, digis, info: str, pid=0xF0):
     return bytes(frame)
 
 
-# ---------------------------------------------------------------------------
-# Stato connessione AX.25 (semplificato: una sessione alla volta)
-# ---------------------------------------------------------------------------
 class Ax25Session:
     def __init__(self, mycall):
         self.mycall = mycall
@@ -293,20 +273,20 @@ class Ax25Session:
         self.reset()
 
     def reset(self):
-        self.state = "DISCONNECTED"   # DISCONNECTED, CONNECTING, CONNECTED, DISCONNECTING
+        self.state = "DISCONNECTED"
         self.peer = None
         self.digis = []
-        self.vs = 0   # nostro N(S) prossimo da inviare
-        self.vr = 0   # prossimo N(S) atteso dal peer
+        self.vs = 0
+        self.vr = 0
         self.event = threading.Event()
+        self.sent = {}
 
 
 # ---------------------------------------------------------------------------
 # RX thread - generico, usa callback per non dipendere dalla UI
 # ---------------------------------------------------------------------------
 def rx_loop(ser, stop_event, sess: Ax25Session, ser_write_lock, on_status, on_data):
-    """on_status(msg): status messages (*** connected, disconnected, errors...)
-       on_data(text): raw text received from the node while connected"""
+
     deframer = KissDeframer()
     while not stop_event.is_set():
         try:
@@ -334,6 +314,7 @@ def rx_loop(ser, stop_event, sess: Ax25Session, ser_write_lock, on_status, on_da
                         sess.state = "CONNECTED"
                         sess.vs = 0
                         sess.vr = 0
+                        sess.sent = {}
                         on_status(f"*** Connected to {sess.peer}")
                         sess.event.set()
                     elif sess.state == "DISCONNECTING" and is_from_peer:
@@ -367,8 +348,6 @@ def rx_loop(ser, stop_event, sess: Ax25Session, ser_write_lock, on_status, on_da
                 elif c["type"] == "I" and sess.state == "CONNECTED" and is_from_peer:
                     if c["ns"] == sess.vr:
                         try:
-                            # CP437: the classic encoding used by packet/BPQ nodes
-                            # for menu box-drawing characters.
                             text = info.decode("cp437", errors="replace") if info else ""
                         except Exception:
                             text = info.hex()
@@ -381,10 +360,27 @@ def rx_loop(ser, stop_event, sess: Ax25Session, ser_write_lock, on_status, on_da
                             ser.write(kiss_build_frame(rr))
                     else:
                         on_status(f"*** Out-of-sequence I-frame from {source} "
-                                  f"(expected N(S)={sess.vr}, got {c['ns']}), ignored")
+                                  f"(expected N(S)={sess.vr}, got {c['ns']}), requesting "
+                                  f"retransmission (REJ)")
+                        rej = build_s_frame(source, sess.mycall, [], "REJ", sess.vr, pf=0)
+                        with ser_write_lock:
+                            ser.write(kiss_build_frame(rej))
 
                 elif c["type"] == "S" and c["stype"] == "RR" and is_from_peer:
-                    pass  # ack received, retransmission not handled in this simplified version
+                    pass
+
+                elif c["type"] == "S" and c["stype"] == "REJ" and is_from_peer:
+                    nr = c["nr"]
+                    on_status(f"*** REJ from {source}: retransmitting from N(S)={nr}")
+                    idx = nr
+                    resent = 0
+                    while idx != sess.vs and resent < 8:
+                        buffered = sess.sent.get(idx)
+                        if buffered is not None:
+                            with ser_write_lock:
+                                ser.write(buffered)
+                        idx = (idx + 1) % 8
+                        resent += 1
 
 
 # ---------------------------------------------------------------------------
@@ -392,7 +388,7 @@ def rx_loop(ser, stop_event, sess: Ax25Session, ser_write_lock, on_status, on_da
 # ---------------------------------------------------------------------------
 def do_connect(ser, ser_write_lock, sess: Ax25Session, mycall, target, digis,
                 on_status, debug=False, attempts=3, timeout=5.0):
-    """Performs the SABM/UA handshake towards 'target'. Returns True if connected."""
+
     with sess.lock:
         sess.peer = target
         sess.digis = digis
@@ -436,7 +432,6 @@ def do_disconnect(ser, ser_write_lock, sess: Ax25Session, mycall, on_status, tim
 
 
 def do_send(ser, ser_write_lock, sess: Ax25Session, mycall, text, ui_dest, ui_digis, on_status):
-    """Sends 'text': as an I-frame if connected, otherwise as a UI frame to ui_dest."""
     with sess.lock:
         connected = (sess.state == "CONNECTED")
         if connected:
@@ -446,8 +441,11 @@ def do_send(ser, ser_write_lock, sess: Ax25Session, mycall, text, ui_dest, ui_di
     if connected:
         payload = text.encode("utf-8") + b"\r"
         frame = build_i_frame(target, mycall, digis, ns, nr, payload)
+        kiss_frame = kiss_build_frame(frame)
+        with sess.lock:
+            sess.sent[ns] = kiss_frame
         with ser_write_lock:
-            ser.write(kiss_build_frame(frame))
+            ser.write(kiss_frame)
         on_status(f"[TX I N(S)={ns}] {mycall} > {target}: {text}")
     else:
         frame = build_ui_frame(ui_dest, mycall, ui_digis, text)
